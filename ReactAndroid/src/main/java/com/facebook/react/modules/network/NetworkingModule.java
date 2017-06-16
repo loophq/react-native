@@ -273,7 +273,9 @@ public final class NetworkingModule extends ReactContextBaseJavaModule {
       }
       requestBuilder.method(
           method,
-          RequestBodyUtil.create(MediaType.parse(contentType), fileInputStream));
+          RequestBodyUtil.createProgressRequest(
+            RequestBodyUtil.create(MediaType.parse(contentType), fileInputStream),
+            new UploadProgressListener(eventEmitter, requestId)));
     } else if (data.hasKey(REQUEST_BODY_KEY_FORMDATA)) {
       if (contentType == null) {
         contentType = "multipart/form-data";
@@ -288,19 +290,7 @@ public final class NetworkingModule extends ReactContextBaseJavaModule {
       requestBuilder.method(
         method,
         RequestBodyUtil.createProgressRequest(
-          multipartBuilder.build(),
-          new ProgressListener() {
-        long last = System.nanoTime();
-
-        @Override
-        public void onProgress(long bytesWritten, long contentLength, boolean done) {
-          long now = System.nanoTime();
-          if (done || shouldDispatch(now, last)) {
-            ResponseUtil.onDataSend(eventEmitter, requestId, bytesWritten, contentLength);
-            last = now;
-          }
-        }
-      }));
+          multipartBuilder.build(), new UploadProgressListener(eventEmitter, requestId)));
     } else {
       // Nothing in data payload, at least nothing we could understand anyway.
       requestBuilder.method(method, RequestBodyUtil.getEmptyBody(method));
@@ -551,5 +541,25 @@ public final class NetworkingModule extends ReactContextBaseJavaModule {
   private RCTDeviceEventEmitter getEventEmitter(ExecutorToken ExecutorToken) {
     return getReactApplicationContext()
         .getJSModule(ExecutorToken, RCTDeviceEventEmitter.class);
+  }
+
+  private static class UploadProgressListener implements ProgressListener {
+    private final RCTDeviceEventEmitter eventEmitter;
+    private final int requestId;
+    private long last = System.nanoTime();
+
+    public UploadProgressListener(RCTDeviceEventEmitter eventEmitter, int requestId) {
+      this.eventEmitter = eventEmitter;
+      this.requestId = requestId;
+    }
+
+    @Override
+    public void onProgress(long bytesWritten, long contentLength, boolean done) {
+      long now = System.nanoTime();
+      if (done || shouldDispatch(now, last)) {
+        ResponseUtil.onDataSend(eventEmitter, requestId, bytesWritten, contentLength);
+        last = now;
+      }
+    }
   }
 }
